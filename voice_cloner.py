@@ -41,7 +41,7 @@ class VoiceCloner:
 
         logger.info(f"初始化VoiceCloner，设备: {self.device}")
 
-    def load_model(self, load_denoiser: bool = True):
+    def load_model(self, load_denoiser: bool = False):
         """
         加载VoxCPM2模型
 
@@ -122,7 +122,7 @@ class VoiceCloner:
         reference_audio: np.ndarray = None,
         reference_sr: int = None,
         cfg_value: float = 3.0,
-        inference_timesteps: int = 20,
+        inference_timesteps: int = 10,
         seed: int = None,
         output_path: str = None,
     ) -> Tuple[np.ndarray, int, str]:
@@ -134,7 +134,7 @@ class VoiceCloner:
             reference_wav_path: 参考音频文件路径（优先级高于reference_audio）
             reference_audio: 参考音频numpy数组（需为16kHz单声道）
             reference_sr: 参考音频采样率（如果提供reference_audio）
-            cfg_value: CFG引导尺度（越高越稳定，默认2.0）
+            cfg_value: CFG引导尺度（越高越稳定，默认3.0）
             inference_timesteps: 推理步数（越多质量越好但越慢，默认10）
             seed: 随机种子（None表示随机）
             output_path: 输出文件路径（可选）

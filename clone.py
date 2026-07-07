@@ -57,9 +57,9 @@ def print_banner():
 )
 @click.option(
     '--cfg',
-    default=2.0,
+    default=3.0,
     type=float,
-    help='CFG引导尺度，值越高生成越稳定但多样性降低 (默认: 2.0)'
+    help='CFG引导尺度，值越高生成越稳定但多样性降低 (默认: 3.0)'
 )
 @click.option(
     '--steps', '-s',

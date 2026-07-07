@@ -6,6 +6,7 @@ TTS引擎模块
 
 import os
 import sys
+import uuid
 from typing import Optional
 
 import config
@@ -16,6 +17,10 @@ from utils.file_utils import (
     validate_file_exists,
     validate_audio_format,
     get_output_path,
+)
+from utils.audio_denoise import (
+    preprocess_reference_audio,
+    postprocess_output_audio,
 )
 
 
@@ -47,7 +52,7 @@ class TTSEngine:
         text: str,
         reference_audio_path: str = None,
         output_path: str = None,
-        cfg_value: float = 2.0,
+        cfg_value: float = 3.0,
         inference_timesteps: int = 10,
         seed: int = None,
     ) -> dict:
@@ -58,8 +63,8 @@ class TTSEngine:
             text: 待合成的中文文本
             reference_audio_path: 参考音频文件路径（用于音色克隆）
             output_path: 输出文件路径（可选，默认自动生成）
-            cfg_value: CFG引导尺度（默认2.0）
-            inference_timesteps: 推理步数（默认10）
+            cfg_value: CFG引导尺度（默认3.0，越高越稳定）
+            inference_timesteps: 推理步数（默认10，越多质量越好但越慢）
             seed: 随机种子（可选）
 
         Returns:
@@ -89,9 +94,8 @@ class TTSEngine:
             if not text or not text.strip():
                 raise ValueError("合成文本不能为空")
 
-            # 处理参考音频（如果提供）
-            ref_audio = None
-            ref_sr = None
+            # 处理参考音频（如果提供）- 使用 ffmpeg 降噪预处理
+            ref_wav_path = None
 
             if reference_audio_path:
                 # 验证参考音频文件
@@ -103,13 +107,19 @@ class TTSEngine:
                         f"不支持的音频格式，支持: {config.SUPPORTED_FORMATS}"
                     )
 
-                # 预处理参考音频
+                # ffmpeg 输入端降噪预处理（第1层降噪：highpass + afftdn + loudnorm）
                 logger.info("\n" + "=" * 60)
-                logger.info("步骤1/3: 预处理参考音频")
+                logger.info("步骤1/4: 参考音频降噪预处理 (ffmpeg)")
                 logger.info("=" * 60)
 
-                ref_audio, ref_sr = self.audio_processor.process_file(reference_audio_path)
-                logger.info(f"✅ 参考音频准备完成: {len(ref_audio)/ref_sr:.2f}秒 @ {ref_sr}Hz")
+                ref_wav_path = os.path.abspath(
+                    os.path.join(config.UPLOAD_FOLDER, f"ref_{uuid.uuid4().hex}.wav")
+                )
+                os.makedirs(config.UPLOAD_FOLDER, exist_ok=True)
+                ok, err = preprocess_reference_audio(reference_audio_path, ref_wav_path)
+                if not ok:
+                    raise RuntimeError(f"参考音频预处理失败: {err[-200:]}")
+                logger.info(f"✅ 参考音频预处理完成: {ref_wav_path}")
 
             # 确定输出路径
             if not output_path:
@@ -121,18 +131,28 @@ class TTSEngine:
 
             # 执行语音合成
             logger.info("\n" + "=" * 60)
-            logger.info("步骤2/3: 执行语音合成")
+            logger.info("步骤2/4: 执行语音合成 (VoxCPM2)")
             logger.info("=" * 60)
 
             audio_data, sample_rate, actual_output = self.cloner.synthesize(
                 text=text,
-                reference_audio=ref_audio,
-                reference_sr=ref_sr,
+                reference_wav_path=ref_wav_path,
                 cfg_value=cfg_value,
                 inference_timesteps=inference_timesteps,
                 seed=seed,
                 output_path=output_path,
             )
+
+            # 输出端强化降噪（第3层：highpass + anlmdn + afftdn + 压缩归一化）
+            logger.info("\n" + "=" * 60)
+            logger.info("步骤3/4: 输出端强化降噪 (ffmpeg)")
+            logger.info("=" * 60)
+
+            if actual_output and os.path.exists(actual_output):
+                denoised_file = actual_output.replace('.wav', '_denoised.wav')
+                ok, _ = postprocess_output_audio(actual_output, denoised_file)
+                if ok:
+                    actual_output = denoised_file
 
             # 更新结果
             duration_sec = len(audio_data) / sample_rate
@@ -142,13 +162,15 @@ class TTSEngine:
             result['duration'] = duration_sec
             result['sample_rate'] = sample_rate
 
+            # 步骤4：完成
             logger.info("\n" + "=" * 60)
-            logger.info("步骤3/3: 完成！")
+            logger.info("步骤4/4: 完成！")
             logger.info("=" * 60)
             logger.info(f"\n🎉 语音生成成功！")
             logger.info(f"   📁 输出文件: {actual_output}")
             logger.info(f"   ⏱️  时长: {duration_sec:.2f}秒")
             logger.info(f"   🔊 采样率: {sample_rate}Hz")
+            logger.info(f"   🎚️  CFG: {cfg_value}, 步数: {inference_timesteps}")
             if reference_audio_path:
                 logger.info(f"   🎤 参考音频: {reference_audio_path}")
             else:
