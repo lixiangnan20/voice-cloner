@@ -222,11 +222,18 @@ def clone_voice():
         import subprocess
         import imageio_ffmpeg
 
-        # 1. 用ffmpeg将上传的音频转为标准WAV（VoxCPM需要WAV格式参考音频）
+        # 1. 用ffmpeg将上传的音频转为标准WAV，并做输入端降噪预处理
+        #    （关键：参考音频干净了，模型就不会学到噪音）
         ffmpeg_path = imageio_ffmpeg.get_ffmpeg_exe()
         wav_path = os.path.abspath(os.path.join(app.config['UPLOAD_FOLDER'], f"ref_{uuid.uuid4().hex}.wav"))
+        # 滤镜链说明：
+        #   highpass=f=70      去除<70Hz低频嗡嗡声（空调/风扇/市电干扰）
+        #   afftdn=nr=12       FFT降噪，强度12dB
+        #   loudnorm=I=-16     响度归一化，让参考音频音量稳定
         result = subprocess.run(
-            [ffmpeg_path, '-i', audio_path, '-y', '-ar', '16000', '-ac', '1', wav_path],
+            [ffmpeg_path, '-i', audio_path, '-y',
+             '-af', 'highpass=f=70,afftdn=nr=12,loudnorm=I=-16:TP=-1.5',
+             '-ar', '16000', '-ac', '1', wav_path],
             capture_output=True, text=True, timeout=30
         )
 
@@ -236,38 +243,51 @@ def clone_voice():
                 'error': f'音频转换失败: {result.stderr[:200]}'
             }), 500
 
-        logger.info(f"参考音频已转换: {wav_path}")
+        logger.info(f"参考音频已降噪预处理: {wav_path}")
+
+        logger.info("正在生成语音（CFG=3.0）...")
 
         # 2. 初始化VoxCPM模型（不加载denoiser，用ffmpeg后处理替代）
         cloner = VoiceCloner()
         cloner.load_model(load_denoiser=False)
 
-        logger.info("正在生成语音（CFG=3.0 + ffmpeg降噪）...")
         audio_output, output_sr, output_file = cloner.synthesize(
             text=text,
             reference_wav_path=wav_path,
             cfg_value=3.0,           # 更高CFG值=更稳定音色
-            inference_timesteps=10,   # 保持10步，避免推理时间过长
+            inference_timesteps=10, # 保持10步，避免推理时间过长
             output_path=os.path.abspath(os.path.join(app.config['OUTPUT_FOLDER'], f"output_{uuid.uuid4().hex}.wav")),
         )
 
         if not output_file or not os.path.exists(output_file):
             raise Exception("语音生成失败，输出文件不存在")
 
-        # 3. ffmpeg后处理降噪（afftdn滤镜）
+        # 3. 强化后处理降噪（多层滤镜链）
+        #    诊断显示：低频<80Hz占比19%（异常高），afftdn单独几乎无效
+        #    滤镜链按顺序：
+        #      highpass=f=80       砍掉<80Hz低频嗡嗡（最有效，立刻干掉19%噪音）
+        #      lowpass=f=8500      去掉>8.5kHz高频嘶嘶声
+        #      afftdn=nr=20        FFT降噪，强度提升到20dB
+        #      anlmdn=s=7:p=0.002  非局部均值降噪，专处理语音稳态噪声
+        #      acompressor         动态压缩，让声音更饱满稳定
+        #      speechnorm=e=12.5   语音电平归一化
+        #      alimiter=limit=0.95 防止削波
         denoised_file = output_file.replace('.wav', '_denoised.wav')
+        denoise_filter = 'highpass=f=80,lowpass=f=8500,afftdn=nr=20:nf=-30,anlmdn=s=7:p=0.002:r=0.002,acompressor=threshold=-20dB:ratio=3:attack=5:release=50,speechnorm=e=12.5:l=1,alimiter=limit=0.95'
         denoise_result = subprocess.run(
             [ffmpeg_path, '-i', output_file, '-y',
-             '-af', 'afftdn=nr=10:nf=-25',   # 降噪：强度10dB，噪声floor-25dB
+             '-af', denoise_filter,
              '-ar', '48000', '-ac', '1',
              denoised_file],
-            capture_output=True, text=True, timeout=30
+            capture_output=True, text=True, timeout=60
         )
 
         # 如果降噪成功，用降噪后的文件替换原文件
         if os.path.exists(denoised_file):
             output_file = denoised_file
-            logger.info("✅ ffmpeg降噪后处理完成")
+            logger.info("✅ 强化降噪后处理完成（highpass+anlmdn+afftdn+speechnorm）")
+        else:
+            logger.warning(f"降噪失败，保留原始输出: {denoise_result.stderr[:200]}")
 
         file_size = os.path.getsize(output_file) / (1024 * 1024)  # MB
 
