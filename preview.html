@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Voice Cloner - 预览模式</title>
+    <style>
+        /* 内嵌完整CSS（用于离线预览） */
+        :root {
+            --primary-color: #6366f1;
+            --primary-hover: #4f46e5;
+            --primary-light: #e0e7ff;
+            --success-color: #10b981;
+            --text-primary: #1f2937;
+            --text-secondary: #6b7280;
+            --text-muted: #9ca3af;
+            --bg-primary: #ffffff;
+            --bg-secondary: #f9fafb;
+            --bg-tertiary: #f3f4f6;
+            --border-color: #e5e7eb;
+            --border-radius: 12px;
+            --border-radius-sm: 8px;
+            --border-radius-lg: 16px;
+            --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            --transition: all 0.3s ease;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+                         'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        .header {
+            background: linear-gradient(135deg, var(--primary-color) 0%, #8b5cf6 100%);
+            color: white;
+            padding: 30px 0;
+            box-shadow: var(--shadow-lg);
+            margin-bottom: 30px;
+        }
+
+        .logo {
+            font-size: 2rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            justify-content: center;
+        }
+
+        .logo .icon { font-size: 2.5rem; }
+        .subtitle {
+            margin-top: 8px;
+            text-align: center;
+            font-size: 1rem;
+            opacity: 0.9;
+        }
+
+        .preview-badge {
+            background: rgba(255,255,255,0.2);
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            margin-left: 12px;
+        }
+
+        .main-content {
+            padding-bottom: 50px;
+        }
+
+        /* 步骤指示器 */
+        .steps-indicator {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 20px;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: var(--bg-primary);
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .step {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-muted);
+        }
+
+        .step.active { color: var(--primary-color); font-weight: 600; }
+        .step.completed { color: var(--success-color); }
+
+        .step-number {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: var(--bg-tertiary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.875rem;
+            font-weight: 600;
+            border: 2px solid transparent;
+            transition: var(--transition);
+        }
+
+        .step.active .step-number {
+            background: var(--primary-light);
+            border-color: var(--primary-color);
+            color: var(--primary-color);
+        }
+
+        .step.completed .step-number {
+            background: var(--success-color);
+            border-color: var(--success-color);
+            color: white;
+        }
+
+        .arrow { color: var(--text-muted); font-size: 1.25rem; }
+
+        /* 工作区 */
+        .workspace {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        @media (max-width: 1024px) {
+            .workspace { grid-template-columns: 1fr; }
+        }
+
+        .panel {
+            background: var(--bg-primary);
+            border-radius: var(--border-radius-lg);
+            padding: 24px;
+            box-shadow: var(--shadow-sm);
+            border: 1px solid var(--border-color);
+            transition: var(--transition);
+        }
+
+        .panel:hover { box-shadow: var(--shadow-md); }
+
+        .panel-title {
+            font-size: 1.125rem;
+            font-weight: 600;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-primary);
+        }
+
+        .title-icon { font-size: 1.25rem; }
+
+        /* 上传区域 */
+        .upload-area {
+            border: 2px dashed var(--border-color);
+            border-radius: var(--border-radius);
+            padding: 40px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: var(--transition);
+            background: var(--bg-secondary);
+        }
+
+        .upload-area:hover {
+            border-color: var(--primary-color);
+            background: var(--primary-light);
+        }
+
+        .upload-icon { font-size: 3rem; margin-bottom: 12px; }
+        .upload-text { font-size: 1rem; color: var(--text-primary); font-weight: 500; margin-bottom: 8px; }
+        .upload-hint { font-size: 0.875rem; color: var(--text-muted); }
+
+        /* 文本输入 */
+        .text-input {
+            width: 100%;
+            min-height: 160px;
+            padding: 16px;
+            border: 2px solid var(--border-color);
+            border-radius: var(--border-radius);
+            font-size: 1rem;
+            line-height: 1.6;
+            resize: vertical;
+            font-family: inherit;
+            transition: var(--transition);
+            background: var(--bg-secondary);
+        }
+
+        .text-input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px var(--primary-light);
+        }
+
+        .text-input::placeholder { color: var(--text-muted); }
+
+        .text-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 12px;
+        }
+
+        .char-count { font-size: 0.875rem; color: var(--text-muted); }
+
+        .example-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .btn-example {
+            padding: 8px 14px;
+            font-size: 0.85rem;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: var(--border-radius-sm);
+            cursor: pointer;
+            transition: var(--transition);
+            color: var(--text-secondary);
+        }
+
+        .btn-example:hover {
+            background: var(--primary-light);
+            border-color: var(--primary-color);
+            color: var(--primary-color);
+        }
+
+        /* 按钮 */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 12px 24px;
+            border: none;
+            border-radius: var(--border-radius-sm);
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: var(--transition);
+            text-decoration: none;
+        }
+
+        .btn:hover { transform: translateY(-1px); box-shadow: var(--shadow-md); }
+
+        .btn-block { width: 100%; }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary-color), #8b5cf6);
+            color: white;
+        }
+
+        .btn-outline {
+            background: white;
+            border: 2px solid var(--border-color);
+            color: var(--text-secondary);
+        }
+
+        .btn-outline:hover {
+            border-color: var(--primary-color);
+            color: var(--primary-color);
+            background: var(--primary-light);
+        }
+
+        .btn-sm { padding: 6px 14px; font-size: 0.875rem; }
+
+        .action-hint {
+            text-align: center;
+            margin-top: 12px;
+            font-size: 0.875rem;
+            color: var(--text-muted);
+        }
+
+        /* 页脚 */
+        .footer {
+            text-align: center;
+            padding: 30px 0;
+            color: var(--text-muted);
+            font-size: 0.875rem;
+            margin-top: 50px;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .notice-box {
+            background: linear-gradient(135deg, #fef3c7, #fde68a);
+            border-left: 4px solid #f59e0b;
+            padding: 16px 20px;
+            border-radius: var(--border-radius-sm);
+            margin-top: 30px;
+            font-size: 0.95rem;
+            color: #92400e;
+        }
+
+        .notice-box strong {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <!-- 顶部导航栏 -->
+    <header class="header">
+        <div class="container">
+            <h1 class="logo">
+                <span class="icon">🎤</span>
+                AI Voice Cloner
+                <span class="preview-badge">📄 界面预览</span>
+            </h1>
+            <p class="subtitle">零样本语音克隆 · 输入30秒音频即可克隆音色</p>
+        </div>
+    </header>
+
+    <!-- 主内容区 -->
+    <main class="main-content">
+        <div class="container">
+
+            <!-- 步骤提示 -->
+            <div class="steps-indicator">
+                <div class="step active" id="step1">
+                    <span class="step-number">1</span>
+                    <span class="step-label">上传音频</span>
+                </div>
+                <div class="arrow">→</div>
+                <div class="step" id="step2">
+                    <span class="step-number">2</span>
+                    <span class="step-label">输入文本</span>
+                </div>
+                <div class="arrow">→</div>
+                <div class="step" id="step3">
+                    <span class="step-number">3</span>
+                    <span class="step-label">生成语音</span>
+                </div>
+            </div>
+
+            <!-- 主要操作区 -->
+            <div class="workspace">
+
+                <!-- 左侧：音频上传 -->
+                <section class="panel upload-panel">
+                    <h2 class="panel-title">
+                        <span class="title-icon">📁</span>
+                        参考音频
+                    </h2>
+
+                    <div class="upload-area">
+                        <div class="upload-icon">🎵</div>
+                        <p class="upload-text">点击或拖拽上传音频文件</p>
+                        <p class="upload-hint">支持 WAV, MP3, OGG, FLAC (5-30秒)</p>
+                    </div>
+                </section>
+
+                <!-- 中间：文本输入 -->
+                <section class="panel text-panel">
+                    <h2 class="panel-title">
+                        <span class="title-icon">✏️</span>
+                        待朗读文本
+                    </h2>
+
+                    <textarea
+                        class="text-input"
+                        placeholder="请输入要朗读的中文文本...&#10;&#10;例如：你好，这是语音克隆测试。"
+                        maxlength="500"
+                        rows="8"
+                    ></textarea>
+
+                    <div class="text-footer">
+                        <span class="char-count"><span id="charCount">0</span>/500 字符</span>
+                        <button class="btn btn-outline btn-sm">
+                            💡 示例文本
+                        </button>
+                    </div>
+
+                    <div class="example-buttons">
+                        <button class="btn btn-example">🎉 欢迎语</button>
+                        <button class="btn btn-example">🌤️ 天气</button>
+                        <button class="btn btn-example">🤖 AI介绍</button>
+                    </div>
+                </section>
+
+                <!-- 右侧：操作按钮 -->
+                <section class="panel action-panel">
+                    <h2 class="panel-title">
+                        <span class="title-icon">⚙️</span>
+                        参数与操作
+                    </h2>
+
+                    <div style="margin-bottom: 20px;">
+                        <label style="display: block; font-size: 0.875rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 6px;">
+                            输出格式
+                        </label>
+                        <select style="width: 100%; padding: 10px 12px; border: 2px solid var(--border-color); border-radius: var(--border-radius-sm);">
+                            <option>WAV (无损)</option>
+                        </select>
+                    </div>
+
+                    <button class="btn btn-primary btn-lg btn-block">
+                        <span>🚀</span>
+                        开始克隆语音
+                    </button>
+
+                    <div class="action-hint">
+                        ⚡ 预计耗时: ~7秒 (CPU模式)
+                    </div>
+                </section>
+            </div>
+
+            <!-- 提示信息 -->
+            <div class="notice-box">
+                <strong>💡 提示</strong>
+                这是一个静态预览页面，用于展示Web界面的设计效果。
+                实际使用时，请运行 <code>start-web.bat</code> 或 <code>python app.py</code> 启动完整的Web服务。
+            </div>
+
+        </div>
+    </main>
+
+    <!-- 底部信息 -->
+    <footer class="footer">
+        <div class="container">
+            <p>基于 VoxCPM2 模型 · 支持CPU推理 · 仅用于学习和研究目的</p>
+        </div>
+    </footer>
+
+    <!-- 简单交互脚本 -->
+    <script>
+        // 字数统计
+        const textInput = document.querySelector('.text-input');
+        const charCount = document.getElementById('charCount');
+
+        textInput.addEventListener('input', () => {
+            charCount.textContent = textInput.value.length;
+        });
+
+        console.log('🎤 Voice Cloner Preview Mode');
+    </script>
+</body>
+</html>

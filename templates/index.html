@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Voice Cloner - 语音克隆工具</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <!-- 顶部导航栏 -->
+    <header class="header">
+        <div class="container">
+            <h1 class="logo">
+                <span class="icon">🎤</span>
+                AI Voice Cloner
+            </h1>
+            <p class="subtitle">零样本语音克隆 · 输入30秒音频即可克隆音色</p>
+        </div>
+    </header>
+
+    <!-- 主内容区 -->
+    <main class="main-content">
+        <div class="container">
+
+            <!-- 步骤提示 -->
+            <div class="steps-indicator">
+                <div class="step active" id="step1">
+                    <span class="step-number">1</span>
+                    <span class="step-label">上传音频</span>
+                </div>
+                <div class="arrow">→</div>
+                <div class="step" id="step2">
+                    <span class="step-number">2</span>
+                    <span class="step-label">输入文本</span>
+                </div>
+                <div class="arrow">→</div>
+                <div class="step" id="step3">
+                    <span class="step-number">3</span>
+                    <span class="step-label">生成语音</span>
+                </div>
+            </div>
+
+            <!-- 主要操作区 -->
+            <div class="workspace">
+
+                <!-- 左侧：音频上传 -->
+                <section class="panel upload-panel">
+                    <h2 class="panel-title">
+                        <span class="title-icon">📁</span>
+                        参考音频
+                    </h2>
+
+                    <div class="upload-area" id="dropZone">
+                        <input type="file" id="audioInput" accept=".wav,.mp3,.ogg,.flac" hidden>
+                        <label for="audioInput" class="upload-label">
+                            <div class="upload-icon">🎵</div>
+                            <p class="upload-text">点击或拖拽上传音频文件</p>
+                            <p class="upload-hint">支持 WAV, MP3, OGG, FLAC (30-60秒)</p>
+                        </label>
+                    </div>
+
+                    <!-- 音频信息展示 -->
+                    <div class="audio-info" id="audioInfo" style="display: none;">
+                        <div class="info-header">
+                            <span class="file-icon">✅</span>
+                            <span class="file-name" id="fileName"></span>
+                        </div>
+                        <div class="info-details">
+                            <div class="info-item">
+                                <span class="info-label">时长:</span>
+                                <span class="info-value" id="duration"></span>
+                            </div>
+                            <div class="info-item">
+                                <span class="info-label">采样率:</span>
+                                <span class="info-value" id="sampleRate"></span>
+                            </div>
+                            <div class="info-item">
+                                <span class="info-label">声道:</span>
+                                <span class="info-value" id="channels"></span>
+                            </div>
+                        </div>
+                        <button class="btn btn-outline btn-sm" onclick="removeAudio()">
+                            ✕ 移除
+                        </button>
+                    </div>
+
+                    <!-- 音频预览播放器（可选） -->
+                    <audio controls id="audioPreview" style="display: none; width: 100%; margin-top: 10px;"></audio>
+
+                </section>
+
+                <!-- 中间：文本输入 -->
+                <section class="panel text-panel">
+                    <h2 class="panel-title">
+                        <span class="title-icon">✏️</span>
+                        待朗读文本
+                    </h2>
+
+                    <textarea
+                        id="textInput"
+                        class="text-input"
+                        placeholder="请输入要朗读的中文文本...&#10;&#10;例如：你好，这是语音克隆测试。"
+                        maxlength="500"
+                        rows="8"
+                    ></textarea>
+
+                    <div class="text-footer">
+                        <span class="char-count"><span id="charCount">0</span>/500 字符</span>
+                        <button class="btn btn-outline btn-sm" onclick="insertExample()">
+                            💡 示例文本
+                        </button>
+                    </div>
+
+                    <!-- 快捷示例按钮组 -->
+                    <div class="example-buttons">
+                        <button class="btn btn-example" onclick="setText('大家好，欢迎使用AI语音克隆工具！')">
+                            🎉 欢迎语
+                        </button>
+                        <button class="btn btn-example" onclick="setText('今天天气真不错，适合出去走走。')">
+                            🌤️ 天气
+                        </button>
+                        <button class="btn btn-example" onclick="setText('人工智能正在改变我们的生活方式。')">
+                            🤖 AI介绍
+                        </button>
+                    </div>
+
+                </section>
+
+                <!-- 右侧：参数设置 & 操作按钮 -->
+                <section class="panel action-panel">
+                    <h2 class="panel-title">
+                        <span class="title-icon">⚙️</span>
+                        参数与操作
+                    </h2>
+
+                    <!-- 简单参数设置 -->
+                    <div class="params-section">
+                        <div class="param-item">
+                            <label class="param-label">输出格式</label>
+                            <select class="param-select" id="outputFormat">
+                                <option value="wav" selected>WAV (无损)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- 主操作按钮 -->
+                    <button
+                        class="btn btn-primary btn-lg btn-block"
+                        id="cloneBtn"
+                        onclick="startClone()"
+                    >
+                        <span class="btn-icon">🚀</span>
+                        开始克隆语音
+                    </button>
+
+                    <div class="action-hint">
+                        ⚡ 预计耗时: ~7秒 (CPU模式)
+                    </div>
+
+                    <!-- 进度显示 -->
+                    <div class="progress-section" id="progressSection" style="display: none;">
+                        <div class="progress-bar-container">
+                            <div class="progress-bar" id="progressBar"></div>
+                        </div>
+                        <p class="progress-text" id="progressText">正在处理...</p>
+                    </div>
+
+                </section>
+            </div>
+
+            <!-- 结果展示区 -->
+            <section class="result-section" id="resultSection" style="display: none;">
+                <h2 class="result-title">
+                    <span>🎯</span>
+                    生成结果
+                </h2>
+
+                <div class="result-content">
+                    <div class="result-audio">
+                        <audio controls autoplay id="resultAudio"></audio>
+                    </div>
+                    <div class="result-info">
+                        <div class="info-row">
+                            <span class="label">原始文本:</span>
+                            <span class="value" id="resultText"></span>
+                        </div>
+                        <div class="info-row">
+                            <span class="label">文件大小:</span>
+                            <span class="value" id="resultSize"></span>
+                        </div>
+                        <div class="info-row">
+                            <span class="label">生成时间:</span>
+                            <span class="value" id="resultTime"></span>
+                        </div>
+                    </div>
+                    <div class="result-actions">
+                        <a href="#" class="btn btn-success" id="downloadBtn" download>
+                            <span>💾</span> 下载音频
+                        </a>
+                        <button class="btn btn-primary" onclick="resetAll()">
+                            <span>🔄</span> 重新开始
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+        </div>
+    </main>
+
+    <!-- 底部信息 -->
+    <footer class="footer">
+        <div class="container">
+            <p>基于 VoxCPM2 模型 · 支持CPU推理 · 仅用于学习和研究目的</p>
+        </div>
+    </footer>
+
+    <!-- JavaScript -->
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

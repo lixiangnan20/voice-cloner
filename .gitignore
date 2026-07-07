@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+
+# 虚拟环境
+.venv/
+env/
+
+# 模型缓存
+cache/
+*.pt
+*.pth
+*.bin
+
+# 上传和输出文件
+uploads/
+outputs/
+*.wav
+*.mp3
+
+# 日志文件
+*.log
+logs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 临时文件
+*.tmp
+*.bak
